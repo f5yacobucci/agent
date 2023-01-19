@@ -19,6 +19,8 @@ const (
 	NginxStart                           = "nginx.start"
 	NginxStop                            = "nginx.stop"
 	NginxPluginConfigured                = "nginx.plugin.config"
+	NginxPluginPing                      = "nginx.plugin.external.ping"
+	NginxPluginPong                      = "nginx.plugin.external.pong"
 	NginxStatusAPIUpdate                 = "nginx.status.api.update"
 	NginxInstancesFound                  = "nginx.instances.found"
 	NginxMasterProcCreated               = "nginx.master.created"

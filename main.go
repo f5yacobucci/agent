@@ -15,6 +15,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/extism/extism"
+
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -65,8 +67,21 @@ func main() {
 		logger.SetLogLevel(loadedConfig.Log.Level)
 		logFile := logger.SetLogFile(loadedConfig.Log.Path)
 		if logFile != nil {
+			// XXX key this from a build flag so external plugins are enabled or disabled
+			// do not enable CGO_ENABLED unless necessary
+			name := logFile.Name()
+			extLogging := extism.SetLogFile(name, loadedConfig.Log.Level)
+			if !extLogging {
+				log.WithFields(
+					log.Fields{
+						"level": loadedConfig.Log.Level,
+						"error": "possible invalid log level (panic, fatal levels unsupported",
+					},
+				).Warn("external plugin logging disabled")
+			}
 			defer logFile.Close()
 		}
+
 		if loadedConfig.DisplayName == "" {
 			loadedConfig.DisplayName = env.GetHostname()
 			log.Infof("setting displayName to %s", loadedConfig.DisplayName)
@@ -246,6 +261,28 @@ func loadPlugins(commander client.Commander, binary *core.NginxBinaryType, env *
 		} else {
 			corePlugins = append(corePlugins, nm)
 		}
+	}
+
+	for i := range loadedConfig.ExternalPlugins {
+		log.WithFields(
+			log.Fields{
+				"index":  i,
+				"config": loadedConfig.ExternalPlugins[i],
+			},
+		).Debug("instantiating external plugin with config")
+
+		p, err := core.NewExternalPlugin(loadedConfig.Log, loadedConfig.ExternalPlugins[i])
+		if err != nil {
+			log.WithFields(
+				log.Fields{
+					"index":  i,
+					"plugin": loadedConfig.ExternalPlugins[i].Source.Name,
+					"error":  err,
+				},
+			).Warn("cannot instantiate plugin")
+			continue
+		}
+		corePlugins = append(corePlugins, p)
 	}
 
 	return corePlugins

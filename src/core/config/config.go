@@ -186,6 +186,7 @@ func GetConfig(clientId string) (*Config, error) {
 		NginxAppProtect:       getNginxAppProtect(),
 		NAPMonitoring:         getNAPMonitoring(),
 		AdvancedMetrics:       getAdvancedMetrics(),
+		ExternalPlugins:       getExternalPlugins(),
 	}
 
 	for _, dir := range strings.Split(config.ConfigDirs, ":") {
@@ -359,6 +360,17 @@ func getTLS() TLSConfig {
 		Ca:         Viper.GetString(TlsCa),
 		SkipVerify: Viper.GetBool(TlsSkipVerify),
 	}
+}
+
+func getExternalPlugins() ExternalPlugins {
+	var plugins ExternalPlugins
+
+	err := Viper.UnmarshalKey(ExternalPluginsKey, &plugins)
+	// TODO: check w/maintainers about how to error here
+	if err != nil {
+		panic(fmt.Sprintf("cannot unmarshal external plugins from config: %v", err))
+	}
+	return plugins
 }
 
 func LoadPropertiesFromFile(cfg string) error {

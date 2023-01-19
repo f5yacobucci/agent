@@ -71,6 +71,8 @@ require (
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/envoyproxy/protoc-gen-validate v0.3.0-java // indirect
+	github.com/extism/extism v0.1.1-0.20230117211906-8bedd83ecde3 // indirect
+	github.com/extism/go-pdk v0.0.0-20221130011241-f3c6bf977dd9 // indirect
 	github.com/felixge/fgprof v0.9.3 // indirect
 	github.com/felixge/httpsnoop v1.0.3 // indirect
 	github.com/go-chi/chi/v5 v5.0.8 // indirect
@@ -141,6 +143,7 @@ require (
 	github.com/tklauser/numcpus v0.5.0 // indirect
 	github.com/toqueteos/webbrowser v1.2.0 // indirect
 	github.com/trivago/tgo v1.0.7 // indirect
+	github.com/valyala/fastjson v1.6.3 // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
 	go.mongodb.org/mongo-driver v1.11.1 // indirect
 	go.opencensus.io v0.24.0 // indirect

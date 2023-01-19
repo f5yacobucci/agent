@@ -26,8 +26,8 @@ OS_VERSION:=22.04
 DOCKER_IMAGE="${OS_RELEASE}:${OS_VERSION}"
 DOCKER_TAG=agent_${OS_RELEASE}_${OS_VERSION}
 
-LDFLAGS = "-w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}"
-DEBUG_LDFLAGS = "-X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}"
+LDFLAGS = -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}
+DEBUG_LDFLAGS = -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}
 
 CERTS_DIR          := ./build/certs
 PACKAGE_PREFIX	   := nginx-agent
@@ -66,7 +66,10 @@ run-debug: ## Run code
 	./build/nginx-agent
 
 build: ## Build agent executable
-	GOWORK=off CGO_ENABLED=0 go build -ldflags=${LDFLAGS} -o ./build/nginx-agent
+	GOWORK=off CGO_ENABLED=0 go build -ldflags="${LDFLAGS}" -o ./build/nginx-agent
+
+build-with-ext:
+	GOWORK=off CGO_ENABLED=1 go build -gcflags="all=-N -l" -ldflags="-X main.withExternal=true ${DEBUG_LDFLAGS}" -o ./build/nginx-agent
 
 deps: ## Update dependencies in vendor folders
 	cd sdk && go mod tidy && go mod vendor &&  make generate && go mod tidy && go mod vendor

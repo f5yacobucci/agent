@@ -8,6 +8,7 @@ whitesource/
 *.test
 *.orig
 sdk/certs/**
+*.swp
 
 __debug_bin
 .key

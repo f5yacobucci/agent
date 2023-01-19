@@ -137,6 +137,9 @@ const (
 	TlsSkipVerify = TlsKey + agent_config.KeyDelimiter + "skip_verify"
 
 	// viper keys used in config
+	ExternalPluginsKey = "external_plugins"
+
+	// viper keys used in config
 	NginxKey = "nginx"
 
 	NginxExcludeLogs    = NginxKey + agent_config.KeyDelimiter + "exclude_logs"

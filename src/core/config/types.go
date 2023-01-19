@@ -36,6 +36,7 @@ type Config struct {
 	AdvancedMetrics       AdvancedMetrics     `mapstructure:"advanced_metrics" yaml:"advanced_metrics,omitempty"`
 	NginxAppProtect       NginxAppProtect     `mapstructure:"nginx_app_protect" yaml:"nginx_app_protect,omitempty"`
 	NAPMonitoring         NAPMonitoring       `mapstructure:"nap_monitoring" yaml:"nap_monitoring,omitempty"`
+	ExternalPlugins       []ExternalPlugin    `mapstructure:"external_plugins" yaml:"external_plugins,omitempty"`
 }
 
 func (c *Config) IsGrpcServerConfigured() bool {
@@ -135,4 +136,26 @@ type NAPMonitoring struct {
 	SyslogPort          int           `mapstructure:"syslog_port" yaml:"-"`
 	ReportInterval      time.Duration `mapstructure:"report_interval" yaml:"-"`
 	ReportCount         int           `mapstructure:"report_count" yaml:"-"`
+}
+
+type PluginSource struct {
+	Path string `mapstructure:"path" yaml:"-"`
+	Hash string `mapstructure:"hash" yaml:"-"`
+	Name string `mapstructure:"name" yaml:"-"`
+}
+
+type ExternalPlugins []ExternalPlugin
+type ExternalPlugin struct {
+	// should eventually be Path, Byte, URL
+	// and cryptographically signed instead
+	// of a bare hash
+	Source        PluginSource      `mapstructure:"source" yaml:"-"`
+	Subscriptions []string          `mapstructure:"subscriptions" yaml"-"`
+	Config        map[string]string `mapstructure:"state" yaml:"-"`
+	// Limits (Memory)
+	// From extism:
+	// AllowedHosts
+	// AllowedPaths
+	// Timeout
+	// Sockets or other FDs for WASI?
 }
