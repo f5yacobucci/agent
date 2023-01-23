@@ -43,6 +43,7 @@ const (
 
 	// Config Keys
 	pluginName = "plugin-name"
+	limit      = "limit"
 )
 
 // Make these an import
@@ -82,6 +83,20 @@ func incrNumberKey(key string) error {
 	pdk.SetVar(key, b)
 
 	return nil
+}
+
+func getKeyUint64(key string) uint64 {
+	if key == "" {
+		return 0
+	}
+
+	val := pdk.GetVar(key)
+	if val == nil {
+		return 0
+	}
+
+	intVal := binary.LittleEndian.Uint64(val)
+	return intVal
 }
 
 func logString(l pdk.LogLevel, s string) {
@@ -199,8 +214,24 @@ func process_() int32 {
 		if err != nil {
 			logString(pdk.LogDebug, "process_ guest: failed incrementing pongs")
 		}
-		// break the cycle
-		return 0
+
+		limit, ok := pdk.GetConfig(limit)
+		if !ok {
+			logString(pdk.LogDebug, "process_ guest: cannot determine limit, stopping")
+			return 0
+		}
+
+		n, err := strconv.ParseUint(limit, 10, 64)
+		if err != nil {
+			// call on_error?
+			logString(pdk.LogDebug, "process_ guest: cannot parse limit config, stopping")
+			return 0
+		}
+
+		if getKeyUint64(pongsRecv) == n {
+			logString(pdk.LogDebug, "process_ geust: limit reached")
+			return 0
+		}
 	}
 
 	ping := pdk.AllocateString(ping)
@@ -214,7 +245,7 @@ func process_() int32 {
 		payload.Length(),
 	)
 	if ret == -1 {
-		setError(fmt.Errorf("process_ guest: host side process__ failed - return code: %v", ret))
+		setError(fmt.Errorf("process_ guest: host side process__ failed - rc: %v", ret))
 		return -1
 	}
 	err = incrNumberKey(pingsSent)

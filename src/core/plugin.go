@@ -12,7 +12,7 @@ package core
 //#include <stdlib.h>
 #include <extism.h>
 EXTISM_GO_FUNCTION(process__);
-EXTISM_GO_FUNCTION(on_return__);
+EXTISM_GO_FUNCTION(on_error__);
 */
 import "C"
 
@@ -21,6 +21,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"runtime/cgo"
 	"unsafe"
 
@@ -75,10 +76,10 @@ const (
 )
 
 const (
-	//on_return__ signature
-	on_return__MsgOffset argPosition = iota
-	on_return__MsgLength
-	on_return__Code
+	//on_error__ signature
+	on_error__MsgOffset argPosition = iota
+	on_error__MsgLength
+	on_error__Code
 )
 
 var (
@@ -114,21 +115,21 @@ var (
 		process__ReturnType,
 	}
 
-	// on_return__ signature
-	on_return__MsgOffsetType = extism.I64
-	on_return__MsgLengthType = extism.I64
-	on_return__CodeType      = extism.I32
+	// on_error__ signature
+	on_error__MsgOffsetType = extism.I64
+	on_error__MsgLengthType = extism.I64
+	on_error__CodeType      = extism.I32
 
-	on_return__ReturnType = extism.I32
+	on_error__ReturnType = extism.I32
 
-	on_return__Parameters []extism.ValType = []extism.ValType{
-		on_return__MsgOffsetType,
-		on_return__MsgLengthType,
-		on_return__CodeType,
+	on_error__Parameters []extism.ValType = []extism.ValType{
+		on_error__MsgOffsetType,
+		on_error__MsgLengthType,
+		on_error__CodeType,
 	}
 
-	on_return__ReturnTypes []extism.ValType = []extism.ValType{
-		on_return__ReturnType,
+	on_error__ReturnTypes []extism.ValType = []extism.ValType{
+		on_error__ReturnType,
 	}
 )
 
@@ -136,7 +137,7 @@ type ExternalPlugin struct {
 	plugin          config.ExternalPlugin
 	logConfig       config.LogConfig
 	ctx             extism.Context
-	handle          extism.Plugin
+	handle          *extism.Plugin // this is a pointer to help with free logic
 	functions       []extism.Function
 	messagePipeline MessagePipeInterface
 }
@@ -157,6 +158,7 @@ func NewExternalPlugin(logConf config.LogConfig, config config.ExternalPlugin) (
 		plugin:    config,
 		logConfig: logConf,
 	}
+	runtime.SetFinalizer(e, free)
 
 	// abstract away an interface for waPC / wasmtime-go but not yet
 	e.ctx = extism.NewContext()
@@ -171,53 +173,45 @@ func NewExternalPlugin(logConf config.LogConfig, config config.ExternalPlugin) (
 			e,                    // plugin itself as userdata to function when called by WASM
 		),
 		extism.NewFunction(
-			"on_return__",
-			on_return__Parameters,
-			on_return__ReturnTypes,
-			C.on_return__,
+			"on_error__",
+			on_error__Parameters,
+			on_error__ReturnTypes,
+			C.on_error__,
 			e,
 		),
 	)
 
 	var err error
-	e.handle, err = e.ctx.PluginFromManifest(
+	handle, err := e.ctx.PluginFromManifest(
 		pluginManifest(config),
 		e.functions,
 		true,
 	)
 	if err != nil {
-		goto cleanup_ctx_on_error
+		return nil, err
 	}
+	e.handle = &handle
 
 	// validate
 	for i := range symbTab {
 		valid := e.handle.FunctionExists(symbTab[i])
 		if !valid {
 			err = fmt.Errorf("plugin does not provide symbol - %s", symbTab[i])
-			goto cleanup_all_on_error
+			return nil, err
 		}
 
 	}
 
-	goto exit
-
-cleanup_all_on_error:
-	e.handle.Free()
-cleanup_ctx_on_error:
-	for i := range e.functions {
-		e.functions[i].Free()
-	}
-	e.ctx.Free()
-	e = nil
-exit:
 	return e, err
 }
 
-func (e *ExternalPlugin) Free() {
+func free(e *ExternalPlugin) {
 	for i := range e.functions {
 		e.functions[i].Free()
 	}
-	e.handle.Free()
+	if e.handle != nil {
+		e.handle.Free()
+	}
 	e.ctx.Free()
 }
 
@@ -279,19 +273,16 @@ func checkMemOffset(plugin *C.ExtismCurrentPlugin, offset uint64) bool {
 	return true
 }
 
-// XXX skeptical this has much value outside of error cases (might turn into on_error__ and process__ as
-// the only host<->guest events
-//
-// host side asynchronous event used as `on_return__`, i.e., the guest code imports this function and invokes it
+// host side asynchronous event used as `on_error__`, i.e., the guest code imports this function and invokes it
 // when its `process_` has computed an answer asynchronously and the guest can't use the host side
 // `process__` for an informative event
 // the guest code must import it from the env when using tinygo
 //     //msg_offset, msg_length, code | ret_code
 //     //go:wasm-module env
-//     //export on_return__
-//     func on_return__(uint64, uint64, uint32) int32
-//export on_return__
-func on_return__(
+//     //export on_error__
+//     func on_error__(uint64, uint64, uint32) int32
+//export on_error__
+func on_error__(
 	plugin *C.ExtismCurrentPlugin,
 	inputs *C.ExtismVal, nInputs C.ExtismSize,
 	outputs *C.ExtismVal, nOutputs C.ExtismSize,
@@ -305,9 +296,9 @@ func on_return__(
 		log.WithFields(
 			log.Fields{
 				"plugin": "unknown",
-				"error":  "on_return__ called from guest with invalid userData (not a publisher)",
+				"error":  "on_error__ called from guest with invalid userData (not a publisher)",
 			},
-		).Warn("on_return__ failed")
+		).Warn("on_error__ failed")
 		binary.LittleEndian.PutUint32(outputSlice[0].v[:], uint32(hostError))
 		return
 	}
@@ -315,31 +306,31 @@ func on_return__(
 		log.Fields{
 			"plugin": p.Name(),
 		},
-	).Debug("on_return__ call from guest")
+	).Debug("on_error__ call from guest")
 
 	memPtr := C.extism_current_plugin_memory(plugin)
 	if memPtr == nil {
 		log.WithFields(
 			log.Fields{
 				"plugin": p.Name(),
-				"error":  "on_return__ received nil memory",
+				"error":  "on_error__ received nil memory",
 			},
-		).Warn("on_return__ cannot publish")
+		).Warn("on_error__ cannot publish")
 		binary.LittleEndian.PutUint32(outputSlice[0].v[:], uint32(hostError))
 		return
 	}
 
 	// valid memory pointer, do simple bounds checking
-	mOffset := getUint64(&(inputSlice[on_return__MsgOffset]))
-	mLength := getUint64(&(inputSlice[on_return__MsgLength]))
+	mOffset := getUint64(&(inputSlice[on_error__MsgOffset]))
+	mLength := getUint64(&(inputSlice[on_error__MsgLength]))
 
 	if !checkMemOffset(plugin, mOffset) {
 		log.WithFields(
 			log.Fields{
 				"plugin": p.Name(),
-				"error":  "on_return__ inputs: msg out of bounds - unaligned with allocated block",
+				"error":  "on_error__ inputs: msg out of bounds - unaligned with allocated block",
 			},
-		).Warn("on_return__ memory exception")
+		).Warn("on_error__ memory exception")
 		binary.LittleEndian.PutUint32(outputSlice[0].v[:], uint32(hostError))
 		return
 	}
@@ -350,7 +341,7 @@ func on_return__(
 			"plugin":  p.Name(),
 			"message": msg,
 		},
-	).Debug("on_return__ publishing topic")
+	).Debug("on_error__ publishing topic")
 
 	// unnecessary but for explicitness right now
 	binary.LittleEndian.PutUint32(outputSlice[0].v[:], 0)
@@ -491,7 +482,6 @@ func (e *ExternalPlugin) Init(pipeline MessagePipeInterface) {
 }
 
 func (e *ExternalPlugin) Close() {
-	defer e.Free()
 	log.WithFields(
 		log.Fields{
 			"plugin": e.Name(),

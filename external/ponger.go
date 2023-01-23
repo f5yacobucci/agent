@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"strconv"
-	"time"
 
 	pdk "github.com/extism/go-pdk"
 	"github.com/valyala/fastjson"
@@ -21,8 +20,8 @@ import "C"
 func process__(uint64, uint64, uint64, uint64) int32
 
 //go:wasm-module env
-//export on_return__
-func on_return__(uint64, uint64, uint32) int32
+//export on_error__
+func on_error__(uint64, uint64, uint32) int32
 
 var (
 	name    = ""
@@ -205,59 +204,18 @@ func process_() int32 {
 			logString(pdk.LogDebug, "process_ guest: failed incrementing pings")
 		}
 
-		// bit contrived, on a ping wait in a goroutine before sending the response
-		// exercised some level of asynchronous behavior
-		// this will run as if GO_MAXPROCS=1, but should still give us non-blocking
-		// behavior with WASM (fingers crossed)
-		// uncomment ASYNC markers to test go routines - as of yet not working
-		//ASYNC go func(then time.Time) {
-		/*
-			then := time.Now()
-			//ASYNC time.Sleep(30 * time.Second)
-
-			msgOut := fmt.Sprintf(
-				"{\"plugin\":\"ponger\",\"returned\":\"yes\",\"time-delay\":%v}",
-				time.Now().Sub(then),
-			)
-
-			retMsg := pdk.AllocateString(msgOut)
-			defer retMsg.Free()
-			ret := on_return__(retMsg.Offset(), retMsg.Length(), 0)
-			if ret == -1 {
-				// error from an error notification...turtles
-				logString(pdk.LogDebug, fmt.Sprintf("process_ guest: async failure, host side on_return__ - rc: %v", ret))
-				//ASYNC return
-				return -1
-			}
-		*/
-
-		then := time.Now()
-
-		msgOut := fmt.Sprintf(`{"plugin":"%s","on_return":true,"time-delay":%v}`,
-			name,
-			time.Now().Sub(then),
-		)
-		retMsg := pdk.AllocateString(msgOut)
-		defer retMsg.Free()
-		ret := on_return__(retMsg.Offset(), retMsg.Length(), 0)
-		if ret == -1 {
-			logString(pdk.LogDebug, fmt.Sprintf("process_ guest: async failure, host side on_return__ - rc: %v", ret))
-			return -1
-		}
-
 		pong := pdk.AllocateString(pong)
 		defer pong.Free()
 		payload := pdk.AllocateString(name)
 		defer payload.Free()
-		ret = process__(
+		ret := process__(
 			pong.Offset(),
 			pong.Length(),
 			payload.Offset(),
 			payload.Length(),
 		)
 		if ret == -1 {
-			logString(pdk.LogDebug, fmt.Sprintf("process_ guest: host side process__ failed - rc: %v", ret))
-			//ASYNC return
+			setError(fmt.Errorf("process_ guest: host side process__ failed - rc: %v", ret))
 			return -1
 		}
 		err = incrNumberKey(pongsSent)
@@ -265,7 +223,6 @@ func process_() int32 {
 			logString(pdk.LogDebug, "process_ guest: failed incrementing pongs")
 		}
 		logString(pdk.LogDebug, "process_ guest: host side process__ success")
-		//ASYNC }(time.Now())
 	}
 
 	b := buildReturn(name, topic, true, pingsRecv, pongsSent)
