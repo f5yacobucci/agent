@@ -12,14 +12,13 @@ package core
 //#include <stdlib.h>
 #include <extism.h>
 EXTISM_GO_FUNCTION(process__);
-EXTISM_GO_FUNCTION(on_error__);
 */
 import "C"
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"runtime"
 	"runtime/cgo"
@@ -63,9 +62,11 @@ type (
 )
 
 // general constants (not iota based)
-const (
-	hostError = 0xFFFFFFFF
-)
+// not used until multivalue is supported
+//const (
+//	hostError     int32 = -1
+//	internalError int32 = -2
+//)
 
 const (
 	//process__ signature
@@ -74,12 +75,11 @@ const (
 	process__DataOffset
 	process__DataLength
 )
-
 const (
-	//on_error__ signature
-	on_error__MsgOffset argPosition = iota
-	on_error__MsgLength
-	on_error__Code
+	//process__ multi return
+	process__ReturnCode argPosition = iota
+	process__ReturnErrorOffset
+	process__ReturnErrorLength
 )
 
 var (
@@ -102,7 +102,11 @@ var (
 	process__DataOffsetType  = extism.I64
 	process__DataLengthType  = extism.I64
 
-	process__ReturnType = extism.I32
+	// using 64 until multivalue is figured out
+	//process__ReturnCodeType        = extism.I32
+	process__ReturnCodeType        = extism.I64
+	process__ReturnErrorOffsetType = extism.I64
+	process__ReturnErrorLengthType = extism.I64
 
 	process__Parameters []extism.ValType = []extism.ValType{
 		process__TopicOffsetType,
@@ -111,25 +115,19 @@ var (
 		process__DataLengthType,
 	}
 
+	/* multivalue is a little sticky: https://github.com/tinygo-org/tinygo/issues/3254
+	   working around at the moment
+	   positive value means to FindMemory and look at error
+	*/
+	/*
+		process__ReturnTypes []extism.ValType = []extism.ValType{
+			process__ReturnCodeType,
+			process__ReturnErrorOffsetType,
+			process__ReturnErrorLengthType,
+		}
+	*/
 	process__ReturnTypes []extism.ValType = []extism.ValType{
-		process__ReturnType,
-	}
-
-	// on_error__ signature
-	on_error__MsgOffsetType = extism.I64
-	on_error__MsgLengthType = extism.I64
-	on_error__CodeType      = extism.I32
-
-	on_error__ReturnType = extism.I32
-
-	on_error__Parameters []extism.ValType = []extism.ValType{
-		on_error__MsgOffsetType,
-		on_error__MsgLengthType,
-		on_error__CodeType,
-	}
-
-	on_error__ReturnTypes []extism.ValType = []extism.ValType{
-		on_error__ReturnType,
+		process__ReturnCodeType,
 	}
 )
 
@@ -147,9 +145,11 @@ func pluginManifest(config config.ExternalPlugin) extism.Manifest {
 		Wasm: []extism.Wasm{
 			extism.WasmFile{
 				Path: config.Source.Path,
+				//Hash: config.Hash,
 			},
 		},
-		Config: config.Config,
+		Config:  config.Config,
+		Timeout: config.Timeout,
 	}
 }
 
@@ -171,13 +171,6 @@ func NewExternalPlugin(logConf config.LogConfig, config config.ExternalPlugin) (
 			process__ReturnTypes, //outputs
 			C.process__,          // function pointer
 			e,                    // plugin itself as userdata to function when called by WASM
-		),
-		extism.NewFunction(
-			"on_error__",
-			on_error__Parameters,
-			on_error__ReturnTypes,
-			C.on_error__,
-			e,
 		),
 	)
 
@@ -263,88 +256,83 @@ func getUint64(input *C.ExtismVal) uint64 {
 		(uint64(input.v[7] << 56)))
 }
 
-func checkMemOffset(plugin *C.ExtismCurrentPlugin, offset uint64) bool {
-	if plugin == nil {
-		return false
+func getString(plugin extism.CurrentPlugin, offset uint64, length uint64) (string, error) {
+	b := plugin.Memory(uint(offset))
+	if b == nil || uint64(len(b)) != length {
+		err := fmt.Errorf("process__ inputs: memory out of bounds - expected size: %d, got: %d",
+			length,
+			len(b),
+		)
+		return "", err
 	}
-	if C.extism_current_plugin_memory_length(plugin, C.uint64_t(offset)) == 0 {
-		return false
-	}
-	return true
+	return string(b), nil
 }
 
-// host side asynchronous event used as `on_error__`, i.e., the guest code imports this function and invokes it
-// when its `process_` has computed an answer asynchronously and the guest can't use the host side
-// `process__` for an informative event
-// the guest code must import it from the env when using tinygo
-//     //msg_offset, msg_length, code | ret_code
-//     //go:wasm-module env
-//     //export on_error__
-//     func on_error__(uint64, uint64, uint32) int32
-//export on_error__
-func on_error__(
-	plugin *C.ExtismCurrentPlugin,
-	inputs *C.ExtismVal, nInputs C.ExtismSize,
-	outputs *C.ExtismVal, nOutputs C.ExtismSize,
-	userData uintptr,
-) {
-	inputSlice := unsafe.Slice(inputs, nInputs)
-	outputSlice := unsafe.Slice(outputs, nOutputs)
-	v := cgo.Handle(userData)
-	p, ok := v.Value().(publisher)
-	if !ok {
-		log.WithFields(
-			log.Fields{
-				"plugin": "unknown",
-				"error":  "on_error__ called from guest with invalid userData (not a publisher)",
-			},
-		).Warn("on_error__ failed")
-		binary.LittleEndian.PutUint32(outputSlice[0].v[:], uint32(hostError))
+//TODO - this could be more dynamic, right just sets (code, error) for a multi typed
+// return, it could also benefit from improved contract checks
+// multivalue is sticky: https://github.com/tinygo-org/tinygo/issues/3254
+/*
+func setReturn(
+	plugin extism.CurrentPlugin,
+	outputs *C.ExtismVal,
+	nOutputs C.ExtismSize,
+	code int32,
+	err error) {
+	// validate then panic for now
+	output := unsafe.Slice(outputs, nOutputs)
+	for i := range output {
+		if output[i].t != (C.ExtismValType)(process__ReturnTypes[i]) {
+			e := fmt.Errorf("setReturn only supports (i32, i64, i64) - index: %d, expected: %d, got: %d",
+				i,
+				process__ReturnTypes[i],
+				output[i],
+			)
+			panic(e)
+		}
+	}
+	ptr := unsafe.Pointer(&output[process__ReturnCode])
+	extism.ValSetI32(ptr, code)
+
+	length := len(err.Error())
+	offset := plugin.Alloc(uint(length))
+
+	mem := plugin.Memory(offset)
+	copy(mem, err.Error())
+
+	ptr = unsafe.Pointer(&output[process__ReturnErrorOffset])
+	extism.ValSetI64(ptr, int64(offset))
+	ptr = unsafe.Pointer(&output[process__ReturnErrorLength])
+	extism.ValSetI64(ptr, int64(length))
+}
+*/
+func setReturn(plugin extism.CurrentPlugin,
+	outputs *C.ExtismVal,
+	nOutputs C.ExtismSize,
+	err error) {
+	// no error, leave as is and return 0
+	if err == nil {
 		return
 	}
-	log.WithFields(
-		log.Fields{
-			"plugin": p.Name(),
-		},
-	).Debug("on_error__ call from guest")
 
-	memPtr := C.extism_current_plugin_memory(plugin)
-	if memPtr == nil {
-		log.WithFields(
-			log.Fields{
-				"plugin": p.Name(),
-				"error":  "on_error__ received nil memory",
-			},
-		).Warn("on_error__ cannot publish")
-		binary.LittleEndian.PutUint32(outputSlice[0].v[:], uint32(hostError))
-		return
+	// validate then panic for now
+	output := unsafe.Slice(outputs, nOutputs)
+	if output[process__ReturnCode].t != (C.ExtismValType)(process__ReturnTypes[process__ReturnCode]) {
+		e := fmt.Errorf("setReturn only supports (i64) - index: %d, expected: %d, got: %d",
+			0,
+			process__ReturnTypes[process__ReturnCode],
+			output[process__ReturnCode],
+		)
+		panic(e)
 	}
 
-	// valid memory pointer, do simple bounds checking
-	mOffset := getUint64(&(inputSlice[on_error__MsgOffset]))
-	mLength := getUint64(&(inputSlice[on_error__MsgLength]))
+	length := len(err.Error())
+	offset := plugin.Alloc(uint(length))
 
-	if !checkMemOffset(plugin, mOffset) {
-		log.WithFields(
-			log.Fields{
-				"plugin": p.Name(),
-				"error":  "on_error__ inputs: msg out of bounds - unaligned with allocated block",
-			},
-		).Warn("on_error__ memory exception")
-		binary.LittleEndian.PutUint32(outputSlice[0].v[:], uint32(hostError))
-		return
-	}
-	msgPtr := unsafe.Add(unsafe.Pointer(memPtr), mOffset)
-	msg := string(C.GoBytes(msgPtr, C.int(mLength)))
-	log.WithFields(
-		log.Fields{
-			"plugin":  p.Name(),
-			"message": msg,
-		},
-	).Debug("on_error__ publishing topic")
+	mem := plugin.Memory(offset)
+	copy(mem, err.Error())
 
-	// unnecessary but for explicitness right now
-	binary.LittleEndian.PutUint32(outputSlice[0].v[:], 0)
+	ptr := unsafe.Pointer(&output[process__ReturnCode])
+	extism.ValSetI64(ptr, int64(offset))
 }
 
 // the host side function to be used as `process__`, i.e., the guest code imports this function and invokes it
@@ -353,10 +341,10 @@ func on_error__(
 //     //signature: topic_offset, topic_length, data_offset, data_length | ret_code
 //     //go:wasm-module env
 //     //export process__
-//     func process__(uint64, uint64, uint64, uint64) int32
+//     func process__(uint64, uint64, uint64, uint64) (int32, uint64, uint64)
 //export process__
 func process__(
-	plugin *C.ExtismCurrentPlugin,
+	plugin unsafe.Pointer,
 	inputs *C.ExtismVal, nInputs C.ExtismSize,
 	outputs *C.ExtismVal, nOutputs C.ExtismSize,
 	userData uintptr,
@@ -365,18 +353,18 @@ func process__(
 	// a plugin calls this host function which proxies a call into
 	// messagePipeline.Process()
 	// do this to account for the signature impedance
-	inputSlice := unsafe.Slice(inputs, nInputs)
-	outputSlice := unsafe.Slice(outputs, nOutputs)
+	ptr := extism.GetCurrentPlugin(plugin)
 	v := cgo.Handle(userData)
 	p, ok := v.Value().(publisher)
 	if !ok {
+		err := errors.New("process__ called from guest with invalid userData (not a publisher)")
 		log.WithFields(
 			log.Fields{
 				"plugin": "unknown",
-				"error":  "process__ called from guest with invalid userData (not a publisher)",
+				"error":  err,
 			},
 		).Warn("process__ failed")
-		binary.LittleEndian.PutUint32(outputSlice[0].v[:], uint32(hostError))
+		setReturn(ptr, outputs, nOutputs, err)
 		return
 	}
 	log.WithFields(
@@ -385,6 +373,7 @@ func process__(
 		},
 	).Debug("process__ call from guest")
 
+	inputSlice := unsafe.Slice(inputs, nInputs)
 	// verify input types
 	for i := range inputSlice {
 		if inputSlice[i].t != (C.ExtismValType)(process__Parameters[i]) {
@@ -397,21 +386,14 @@ func process__(
 				},
 			).Warn("process__ received invalid inputs")
 
-			binary.LittleEndian.PutUint32(outputSlice[0].v[:], uint32(hostError))
+			err := fmt.Errorf("process__ inputs invalid type at position %d: expected %d, got %d",
+				i,
+				process__Parameters[i],
+				inputSlice[i].t,
+			)
+			setReturn(ptr, outputs, nOutputs, err)
 			return
 		}
-	}
-
-	memPtr := C.extism_current_plugin_memory(plugin)
-	if memPtr == nil {
-		log.WithFields(
-			log.Fields{
-				"plugin": p.Name(),
-				"error":  "process__ received nil memory",
-			},
-		).Warn("process__ cannot publish")
-		binary.LittleEndian.PutUint32(outputSlice[0].v[:], uint32(hostError))
-		return
 	}
 
 	// valid memory pointer, do simple bounds checking
@@ -420,32 +402,33 @@ func process__(
 	dOffset := getUint64(&(inputSlice[process__DataOffset]))
 	dLength := getUint64(&(inputSlice[process__DataLength]))
 
-	if !checkMemOffset(plugin, tOffset) {
+	topic, err := getString(ptr, tOffset, tLength)
+	if err != nil {
 		log.WithFields(
 			log.Fields{
-				"plugin": p.Name(),
-				"error":  "process__ inputs: topic out of bounds - unaligned with allocated block",
+				"plugin":    p.Name(),
+				"error":     err.Error(),
+				"msg-field": "topic",
 			},
 		).Warn("process__ memory exception")
-		binary.LittleEndian.PutUint32(outputSlice[0].v[:], uint32(hostError))
-		return
+
+		e := fmt.Errorf("unaligned memory for topic field: %w", err)
+		setReturn(ptr, outputs, nOutputs, e)
 	}
-	if !checkMemOffset(plugin, dOffset) {
+
+	data, err := getString(ptr, dOffset, dLength)
+	if err != nil {
 		log.WithFields(
 			log.Fields{
-				"plugin": p.Name(),
-				"error":  "process__ inputs: data out of bounds - unaligned with allocated block",
+				"plugin":    p.Name(),
+				"error":     err.Error(),
+				"msg-field": "data",
 			},
 		).Warn("process__ memory exception")
-		binary.LittleEndian.PutUint32(outputSlice[0].v[:], uint32(hostError))
-		return
+
+		e := fmt.Errorf("unaligned memory for data field: %w", err)
+		setReturn(ptr, outputs, nOutputs, e)
 	}
-
-	topicPtr := unsafe.Add(unsafe.Pointer(memPtr), tOffset)
-	topic := string(C.GoBytes(topicPtr, C.int(tLength)))
-
-	dataPtr := unsafe.Add(unsafe.Pointer(memPtr), dOffset)
-	data := string(C.GoBytes(dataPtr, C.int(dLength)))
 
 	log.WithFields(
 		log.Fields{
@@ -456,8 +439,7 @@ func process__(
 
 	p.Process__(NewMessage(topic, data))
 
-	// unnecessary but for explicitness right now
-	binary.LittleEndian.PutUint32(outputSlice[0].v[:], 0)
+	setReturn(ptr, outputs, nOutputs, nil)
 }
 
 func (e *ExternalPlugin) Init(pipeline MessagePipeInterface) {

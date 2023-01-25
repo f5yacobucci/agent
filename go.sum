@@ -123,6 +123,8 @@ github.com/felixge/fgprof v0.9.3/go.mod h1:RdbpDgzqYVh/T9fPELJyV7EYJuHB55UTEULNu
 github.com/felixge/httpsnoop v1.0.1/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
 github.com/felixge/httpsnoop v1.0.3 h1:s/nj+GCswXYzN5v2DpNMuMQYe+0DDwt5WVCU6CWBdXk=
 github.com/felixge/httpsnoop v1.0.3/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
+github.com/felixge/fgprof v0.9.3 h1:VvyZxILNuCiUCSXtPtYmmtGvb65nqXh2QFWc0Wpf2/g=
+github.com/felixge/fgprof v0.9.3/go.mod h1:RdbpDgzqYVh/T9fPELJyV7EYJuHB55UTEULNun8eiPw=
 github.com/extism/extism v0.1.0 h1:0DHOZ5Ou8+jtFIKWl+Ay7IOzzKmtyWSVfzZeD07gubs=
 github.com/extism/extism v0.1.0/go.mod h1:d5IwHeVomfV6LLHCtBVXf1IaB0YlDsjfWi8cZmqJqUI=
 github.com/extism/extism v0.1.1-0.20230110200440-dc3d54e26023 h1:Qa3fNFYKAVm6R6doFRAXnr3R9C4VnpkXrhCzndP6jds=
@@ -131,8 +133,14 @@ github.com/extism/extism v0.1.1-0.20230117205643-daf1fc877a1c h1:wPGMh9hUX338s2s
 github.com/extism/extism v0.1.1-0.20230117205643-daf1fc877a1c/go.mod h1:d5IwHeVomfV6LLHCtBVXf1IaB0YlDsjfWi8cZmqJqUI=
 github.com/extism/extism v0.1.1-0.20230117211906-8bedd83ecde3 h1:kdniBqMnFcdioJv0EZ0gSmiMFrN6APDWiZk64d2UPSU=
 github.com/extism/extism v0.1.1-0.20230117211906-8bedd83ecde3/go.mod h1:d5IwHeVomfV6LLHCtBVXf1IaB0YlDsjfWi8cZmqJqUI=
+github.com/extism/extism v0.2.0 h1:9fsjQI7xNqSwooN1duuPpvmh2iccuZIj606mUlRszA0=
+github.com/extism/extism v0.2.0/go.mod h1:d5IwHeVomfV6LLHCtBVXf1IaB0YlDsjfWi8cZmqJqUI=
 github.com/extism/go-pdk v0.0.0-20221130011241-f3c6bf977dd9 h1:NYy641iz6eNufdCT7SHxB3eyCrtV0GP/s6lbFEUbcGw=
 github.com/extism/go-pdk v0.0.0-20221130011241-f3c6bf977dd9/go.mod h1:1wdiAoG8306g4WK+6laBrS+75089/0V4XRVTllt8b5U=
+github.com/extism/go-pdk v0.0.0-20230119214914-65bffbeb3e64 h1:IfR1k741q+yQLvv5sLShCkvt3FgKU4wQVJfp7hhb/iY=
+github.com/extism/go-pdk v0.0.0-20230119214914-65bffbeb3e64/go.mod h1:1wdiAoG8306g4WK+6laBrS+75089/0V4XRVTllt8b5U=
+github.com/felixge/fgprof v0.9.3 h1:VvyZxILNuCiUCSXtPtYmmtGvb65nqXh2QFWc0Wpf2/g=
+github.com/felixge/fgprof v0.9.3/go.mod h1:RdbpDgzqYVh/T9fPELJyV7EYJuHB55UTEULNun8eiPw=
 github.com/frankban/quicktest v1.14.3 h1:FJKSZTDHjyhriyC81FLQ0LY93eSai0ZyR/ZIkd3ZUKE=
 github.com/fsnotify/fsnotify v1.4.7/go.mod h1:jwhsz4b93w/PPRr/qN1Yymfu8t87LnFCMoQvtojpjFo=
 github.com/fsnotify/fsnotify v1.4.9/go.mod h1:znqG4EE+3YCdAaPaxE2ZRY/06pZUdp0tY4IgpuI1SZQ=

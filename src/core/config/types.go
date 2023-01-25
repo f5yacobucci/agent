@@ -152,10 +152,10 @@ type ExternalPlugin struct {
 	Source        PluginSource      `mapstructure:"source" yaml:"-"`
 	Subscriptions []string          `mapstructure:"subscriptions" yaml"-"`
 	Config        map[string]string `mapstructure:"state" yaml:"-"`
+	Timeout       uint              `mapstructure:"timeout-ms" yaml:"-"`
 	// Limits (Memory)
 	// From extism:
 	// AllowedHosts
 	// AllowedPaths
-	// Timeout
 	// Sockets or other FDs for WASI?
 }
