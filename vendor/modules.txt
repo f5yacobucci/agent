@@ -284,12 +284,9 @@ github.com/docker/go-units
 # github.com/envoyproxy/protoc-gen-validate v0.3.0-java
 ## explicit
 github.com/envoyproxy/protoc-gen-validate/validate
-# github.com/extism/extism v0.1.1-0.20230117211906-8bedd83ecde3
+# github.com/extism/extism v0.2.0
 ## explicit; go 1.18
 github.com/extism/extism
-# github.com/extism/go-pdk v0.0.0-20221130011241-f3c6bf977dd9
-## explicit; go 1.19
-github.com/extism/go-pdk
 # github.com/felixge/fgprof v0.9.3
 ## explicit; go 1.14
 github.com/felixge/fgprof
@@ -297,25 +294,6 @@ github.com/felixge/fgprof
 ## explicit; go 1.13
 github.com/felixge/httpsnoop
 # github.com/fsnotify/fsnotify v1.6.0
-# github.com/felixge/fgprof v0.9.3
-## explicit; go 1.14
-github.com/felixge/fgprof
-# github.com/extism/extism v0.1.1-0.20230117211906-8bedd83ecde3
-## explicit; go 1.18
-github.com/extism/extism
-# github.com/extism/go-pdk v0.0.0-20221130011241-f3c6bf977dd9
-## explicit; go 1.19
-github.com/extism/go-pdk
-# github.com/fsnotify/fsnotify v1.5.4
-# github.com/extism/extism v0.2.0
-## explicit; go 1.18
-github.com/extism/extism
-# github.com/extism/go-pdk v0.0.0-20230119214914-65bffbeb3e64
-## explicit; go 1.19
-# github.com/felixge/fgprof v0.9.3
-## explicit; go 1.14
-github.com/felixge/fgprof
-# github.com/fsnotify/fsnotify v1.5.4
 ## explicit; go 1.16
 github.com/fsnotify/fsnotify
 # github.com/go-chi/chi/v5 v5.0.8
@@ -763,8 +741,6 @@ github.com/toqueteos/webbrowser
 github.com/trivago/grok
 # github.com/trivago/tgo v1.0.7
 ## explicit
-# github.com/valyala/fastjson v1.6.3
-## explicit; go 1.12
 # github.com/vardius/message-bus v1.1.5
 ## explicit; go 1.12
 github.com/vardius/message-bus
