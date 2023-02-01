@@ -11,6 +11,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"runtime"
 	"strconv"
 	"syscall"
 	"time"
@@ -22,12 +23,15 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 
+	"github.com/bytecodealliance/wasmtime-go"
 	"github.com/nginx/agent/sdk/v2/client"
 	sdkGRPC "github.com/nginx/agent/sdk/v2/grpc"
 	"github.com/nginx/agent/v2/src/core"
 	"github.com/nginx/agent/v2/src/core/config"
 	"github.com/nginx/agent/v2/src/core/logger"
 	"github.com/nginx/agent/v2/src/plugins"
+	wapcsdk "github.com/wapc/wapc-go"
+	wapcwasmtime "github.com/wapc/wapc-go/engines/wasmtime"
 )
 
 var (
@@ -263,6 +267,22 @@ func loadPlugins(commander client.Commander, binary *core.NginxBinaryType, env *
 		}
 	}
 
+	// create engine
+	// create module
+	// create plugin and instance
+	wapcCtx := context.Background()
+	router := core.NewRouter()
+	engine := wapcwasmtime.EngineWithRuntime(
+		func() (*wasmtime.Engine, error) {
+			config := wasmtime.NewConfig()
+			// set global parameters here
+
+			config.SetWasmMemory64(true)
+			// XXX what do we do about Fuel or Epoch interruption?
+			return wasmtime.NewEngineWithConfig(config), nil
+		},
+	)
+	modules := make(map[string]wapcsdk.Module)
 	for i := range loadedConfig.ExternalPlugins {
 		log.WithFields(
 			log.Fields{
@@ -271,7 +291,60 @@ func loadPlugins(commander client.Commander, binary *core.NginxBinaryType, env *
 			},
 		).Debug("instantiating external plugin with config")
 
-		p, err := core.NewExternalPlugin(loadedConfig.Log, loadedConfig.ExternalPlugins[i])
+		// XXX - check hash and hold onto to the module for now, improve later
+		// shouldn't really trust hash, but just figuring out initialization first
+		hash := loadedConfig.ExternalPlugins[i].Source.Hash
+		mod, ok := modules[hash]
+		if !ok {
+			guest, err := os.ReadFile(loadedConfig.ExternalPlugins[i].Source.Path)
+			if err != nil {
+				log.WithFields(
+					log.Fields{
+						"index":  i,
+						"plugin": loadedConfig.ExternalPlugins[i].Source.Name,
+						"file":   loadedConfig.ExternalPlugins[i].Source.Path,
+						"error":  err,
+					},
+				).Warn("cannot read wasm file")
+				continue
+			}
+			// XXX - NoOpHostCallHandler will eventually supply message bus Process
+			mod, err = engine.New(
+				wapcCtx,
+				router.Route,
+				guest,
+				&wapcsdk.ModuleConfig{
+					Logger: func(msg string) {
+						if len(msg) > 0 {
+							log.Debug(msg)
+						}
+					},
+					Stdout: os.Stdout,
+					Stderr: os.Stderr,
+				},
+			)
+			if err != nil {
+				log.WithFields(
+					log.Fields{
+						"index":  i,
+						"plugin": loadedConfig.ExternalPlugins[i].Source.Name,
+						"error":  err,
+					},
+				).Warn("cannot compile runtime module")
+				continue
+			}
+			modules[hash] = mod
+
+			runtime.SetFinalizer(
+				mod,
+				func() any {
+					return func(m wapcsdk.Module) {
+						m.Close(wapcCtx)
+					}
+				}(),
+			)
+		}
+		p, err := core.NewExternalPlugin(wapcCtx, loadedConfig.ExternalPlugins[i], router, mod)
 		if err != nil {
 			log.WithFields(
 				log.Fields{
