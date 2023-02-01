@@ -13,7 +13,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/extism/extism"
 	"runtime"
 	"sync"
 
@@ -68,19 +67,6 @@ type ExternalPlugin struct {
 	messagePipeline MessagePipeInterface
 }
 
-func pluginManifest(config config.ExternalPlugin) extism.Manifest {
-	return extism.Manifest{
-		Wasm: []extism.Wasm{
-			extism.WasmFile{
-				Path: config.Source.Path,
-				//Hash: config.Hash,
-			},
-		},
-		Config:  config.Config,
-		Timeout: config.Timeout,
-	}
-}
-
 func NewExternalPlugin(ctx context.Context, config config.ExternalPlugin, router *Router, module wapcsdk.Module) (*ExternalPlugin, error) {
 	e := &ExternalPlugin{
 		plugin: config,
@@ -129,7 +115,19 @@ func (e *ExternalPlugin) Init(pipeline MessagePipeInterface) {
 
 	e.messagePipeline = pipeline
 
-	_, err := e.handle.Invoke(e.ctx, "init_", nil)
+	//TODO, use Apex, better serial/deserial operations from an IDL
+	//it's easier to do this than pull out wasiconfig and add environmental
+	//keys at this point
+	input, err := json.Marshal(e.plugin.Config)
+	if err != nil {
+		log.WithFields(
+			log.Fields{
+				"error":  err.Error(),
+				"plugin": e.Name(),
+			},
+		).Warn("cannot set init_ input, plugin functions may be effected")
+	}
+	_, err = e.handle.Invoke(e.ctx, "init_", input)
 	if err != nil {
 		panic(fmt.Sprintf("%s failed calling init_: %s", e.Name(), err.Error()))
 	}
