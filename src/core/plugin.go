@@ -323,14 +323,14 @@ type (
 	Callback func([]byte) ([]byte, error)
 
 	Router struct {
-		lock sync.Mutex
+		lock *sync.Mutex
 		tree *iradix.Tree[Callback]
 	}
 )
 
 func NewRouter() *Router {
 	return &Router{
-		lock: sync.Mutex{},
+		lock: &sync.Mutex{},
 		tree: iradix.New[Callback](),
 	}
 }
